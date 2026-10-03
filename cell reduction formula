@@ -1,0 +1,248 @@
+// Cell-voltage charge-current limiter
+//
+// NORMAL MODE:
+//   Applies the cell-voltage current curve.
+//
+// HYSTERESIS:
+//   Cell limiter activates at >= 3.350 V.
+//   Once active, it remains active until <= 3.340 V.
+//   Between 3.340 V and 3.350 V, the limiter holds at 15 A
+//   instead of clearing and allowing DVCC to jump back to 100 A.
+//
+// LIMITED MODE:
+//   Stops responding to cell-voltage changes after End Balance.
+//   Remains stopped until cell voltage falls to 3.320 V.
+//
+// RESTART:
+//   At <= 3.320 V, the cell limiter becomes active again.
+//   Because 3.320 V is below the 3.340 V release point,
+//   desiredCell is cleared and SOC remains authoritative.
+//
+// Rate-limited to once every 5 seconds.
+
+const points = [
+    { v: 3.350, a: 15 },
+    { v: 3.375, a: 10 },
+    { v: 3.400, a: 5 },
+    { v: 3.425, a: 2 },
+    { v: 3.450, a: 1 },
+    { v: 3.500, a: 0 }
+];
+
+const ACTIVATE_VOLTAGE = 3.350;
+const RELEASE_VOLTAGE = 3.340;
+const RESTART_VOLTAGE = 3.320;
+
+const voltage = Number(msg.payload);
+const now = Date.now();
+const lastSend = flow.get('lastCellSend') || 0;
+
+if (isNaN(voltage)) {
+    node.status({
+        fill:"red",
+        shape:"ring",
+        text:"invalid voltage"
+    });
+    return null;
+}
+
+// ============================================================
+// LIMITED MODE
+// ============================================================
+
+if (flow.get('limitedMode') === true) {
+
+    // Stay completely inactive while voltage is above 3.320 V.
+    if (voltage > RESTART_VOLTAGE) {
+        node.status({
+            fill:"grey",
+            shape:"ring",
+            text: voltage.toFixed(3) +
+                  " V — limited mode, waiting ≤ 3.320 V"
+        });
+        return null;
+    }
+
+    // Voltage has reached the restart point.
+    // Clear the cell limiter so SOC remains authoritative.
+    flow.set('cellLimiterActive', false);
+    flow.set('desiredCell', undefined);
+    flow.set('lastCellSend', now);
+
+    node.status({
+        fill:"blue",
+        shape:"dot",
+        text: voltage.toFixed(3) +
+              " V — cell limiter resumed"
+    });
+
+    return {payload:"recalc"};
+}
+
+// ============================================================
+// NORMAL MODE — HYSTERESIS
+// ============================================================
+
+let cellLimiterActive = flow.get('cellLimiterActive') === true;
+
+// If limiter is inactive, it activates at 3.350 V.
+if (!cellLimiterActive) {
+
+    if (voltage < ACTIVATE_VOLTAGE) {
+
+        // Still below activation point.
+        if (flow.get('desiredCell') !== undefined) {
+            flow.set('desiredCell', undefined);
+            flow.set('lastCellSend', now);
+
+            node.status({
+                fill:"grey",
+                shape:"ring",
+                text: voltage.toFixed(3) +
+                      " V (no cell limit)"
+            });
+
+            return {payload:"recalc"};
+        }
+
+        node.status({
+            fill:"grey",
+            shape:"ring",
+            text: voltage.toFixed(3) +
+                  " V (no cell limit)"
+        });
+
+        return null;
+    }
+
+    // Reached activation voltage.
+    cellLimiterActive = true;
+    flow.set('cellLimiterActive', true);
+}
+
+// ============================================================
+// ACTIVE LIMITER — RELEASE ONLY AT 3.340 V
+// ============================================================
+
+if (cellLimiterActive && voltage <= RELEASE_VOLTAGE) {
+
+    flow.set('cellLimiterActive', false);
+    flow.set('desiredCell', undefined);
+    flow.set('lastCellSend', now);
+
+    node.status({
+        fill:"grey",
+        shape:"ring",
+        text: voltage.toFixed(3) +
+              " V — cell limiter released"
+    });
+
+    return {payload:"recalc"};
+}
+
+// ============================================================
+// 3.340–3.350 V HYSTERESIS BAND
+// ============================================================
+//
+// If the limiter is already active and voltage falls below
+// 3.350 V but remains above 3.340 V, hold 15 A.
+// This prevents:
+//     15 A → 100 A → 15 A
+// when voltage is hovering around 3.350 V.
+//
+
+if (voltage < ACTIVATE_VOLTAGE) {
+
+    if (now - lastSend < 5000) {
+        node.status({
+            fill:"blue",
+            shape:"ring",
+            text: voltage.toFixed(3) +
+                  " V → 15 A (waiting 5s)"
+        });
+        return null;
+    }
+
+    flow.set('desiredCell', 15);
+    flow.set('lastCellSend', now);
+
+    node.status({
+        fill:"yellow",
+        shape:"dot",
+        text: voltage.toFixed(3) +
+              " V → 15 A (hysteresis)"
+    });
+
+    return {payload:"recalc"};
+}
+
+// ============================================================
+// NORMAL CELL CURVE
+// ============================================================
+
+if (now - lastSend < 5000) {
+    node.status({
+        fill:"blue",
+        shape:"ring",
+        text: voltage.toFixed(3) +
+              " V (waiting 5s)"
+    });
+    return null;
+}
+
+let current;
+
+if (voltage >= points[points.length - 1].v) {
+
+    current = 0;
+
+} else {
+
+    let i = 0;
+
+    while (
+        i < points.length - 1 &&
+        voltage > points[i + 1].v
+    ) {
+        i++;
+    }
+
+    const p0 = points[Math.max(i - 1, 0)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(i + 2, points.length - 1)];
+
+    const t = (voltage - p1.v) / (p2.v - p1.v);
+
+    const m1 = 0.5 * (p2.a - p0.a);
+    const m2 = 0.5 * (p3.a - p1.a);
+
+    const t2 = t * t;
+    const t3 = t2 * t;
+
+    const a = 2 * t3 - 3 * t2 + 1;
+    const b = t3 - 2 * t2 + t;
+    const c = t3 - t2;
+    const d = -2 * t3 + 3 * t2;
+
+    current =
+        a * p1.a +
+        b * m1 +
+        c * m2 +
+        d * p2.a;
+
+    current = Math.max(0, Math.min(15, current));
+    current = Math.round(current * 10) / 10;
+}
+
+flow.set('desiredCell', current);
+flow.set('lastCellSend', now);
+
+node.status({
+    fill:"green",
+    shape:"dot",
+    text: voltage.toFixed(3) +
+          " V → " + current + " A"
+});
+
+return {payload:"recalc"};
