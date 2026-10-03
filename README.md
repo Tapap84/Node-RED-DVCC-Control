@@ -10,4 +10,4 @@ The battery is allowed to charge to 100% and has a two hour window to allow char
 
 The cell monitor will reduce charging current to 15a at 3.35v and taper to 1a at 3.45v and 0a at 3.50v. This is useful for packs that drift in cell difference or you want another layer of stopping cell over volting. 
 
-![alt text] (https://github.com/Tapap84/Node-RED_DVCC_Control/blob/main/Screenshot%202026-10-02%20221401.png)
+![alt text](https://github.com/Tapap84/Node-RED_DVCC_Control/blob/main/Screenshot%202026-10-02%20221401.png)
