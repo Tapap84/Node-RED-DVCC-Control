@@ -1,6 +1,6 @@
-Yes, I used AI to check for errors, clean up issues, and add context.
+This was hand built; however, I used AI to check for errors and clean up issues. I ran tests using input nodes simulating various voltages, then I gave it to Claude to do the same to endure the voltage limiter functions without issues.  
 
-Running on my system for about three months without issues.
+Running on my system since August of 2026 without issues.
 
 This is a Node-RED flow for either Cerbo GX or raspberry pi running venus OS, JKBMS on the battery, and DVCC enabled.
 
