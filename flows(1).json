@@ -1,0 +1,939 @@
+[
+    {
+        "id": "70da64f771a1252f",
+        "type": "switch",
+        "z": "810d20f69203c8c5",
+        "name": "SOC Thresholds",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "99.8",
+                "vt": "num"
+            },
+            {
+                "t": "lte",
+                "v": "30",
+                "vt": "num"
+            },
+            {
+                "t": "gte",
+                "v": "80",
+                "vt": "num"
+            }
+        ],
+        "checkall": "false",
+        "repair": false,
+        "outputs": 3,
+        "x": 300,
+        "y": 100,
+        "wires": [
+            [
+                "4e9f502336454cd0"
+            ],
+            [
+                "70e46920321f0d1a"
+            ],
+            [
+                "a50c4a9612f8e18c"
+            ]
+        ]
+    },
+    {
+        "id": "4e9f502336454cd0",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Full charge → start 2hr balance",
+        "func": "// Ignore full-SOC readings while in limited mode.\n// Without this, SOC drifting 100 -> 99.9 after the balance ends\n// would restart the balance and cancel the 14-day timer.\nif (flow.get('limitedMode') === true) return null;\n\nif (flow.get('balanceHold') !== true) {\n    flow.set('balanceHold', true);\n    flow.set('limitedMode', false);\n    flow.set('windowOpen', false);\n    flow.set('desiredSOC', 100);\n    flow.set('fullCycleEnd', 0);\n    flow.set('balanceEnd', 0);\n    flow.set('fullCycleTimerGeneration', (flow.get('fullCycleTimerGeneration') || 0) + 1);\n    flow.set('balanceTimerGeneration', (flow.get('balanceTimerGeneration') || 0) + 1);\n    flow.set('clear14DayTimerStatus', true);\n    flow.set('clearBalanceTimerStatus', false);\n\n    node.send([{payload: \"start_2h\"}, {payload: \"recalc\"}]);\n    return null;\n}\n\nnode.status({});\nreturn null;",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 550,
+        "y": 60,
+        "wires": [
+            [
+                "e9b24eb945a47589"
+            ],
+            [
+                "ee777ba6578afa23"
+            ]
+        ]
+    },
+    {
+        "id": "c257cf1a27aa1b41",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "End balance → 0A + start 14d timer",
+        "func": "flow.set('balanceHold', false);\nflow.set('limitedMode', true);\nflow.set('windowOpen', false);\nflow.set('desiredSOC', 0);\n\nflow.set('balanceEnd', 0);\nflow.set('balanceTimerGeneration', (flow.get('balanceTimerGeneration') || 0) + 1);\nflow.set('clearBalanceTimerStatus', true);\nflow.set('fullCycleEnd', 0);\nflow.set('clear14DayTimerStatus', false);\n\nnode.status({fill:\"green\",shape:\"dot\",text:\"Limited mode 30-80\"});\n\nnode.send([{payload: \"recalc\"}, {payload: \"start_14day\"}]);\nreturn null;",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1120,
+        "y": 40,
+        "wires": [
+            [
+                "c0d05242f125292d"
+            ],
+            [
+                "25e8a122b4aa3031"
+            ]
+        ]
+    },
+    {
+        "id": "091d427e51eb4ccf",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Allow next full charge",
+        "func": "flow.set('limitedMode', false);\nflow.set('balanceHold', false);\nflow.set('windowOpen', false);\nflow.set('desiredSOC', 100);\nflow.set('balanceEnd', 0);\nflow.set('fullCycleEnd', 0);\nflow.set('balanceTimerGeneration', (flow.get('balanceTimerGeneration') || 0) + 1);\nflow.set('fullCycleTimerGeneration', (flow.get('fullCycleTimerGeneration') || 0) + 1);\nflow.set('clearBalanceTimerStatus', true);\nflow.set('clear14DayTimerStatus', true);\n\nnode.status({});\nreturn {payload: \"recalc\"};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1180,
+        "y": 120,
+        "wires": [
+            [
+                "d50da29f544b5bee"
+            ]
+        ]
+    },
+    {
+        "id": "70e46920321f0d1a",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "SOC ≤ 30% → charge 100A",
+        "func": "if (flow.get('limitedMode') !== true) return null;\n\nconst windowOpen = flow.get('windowOpen') || false;\n\nif (!windowOpen) {\n    flow.set('windowOpen', true);\n    flow.set('desiredSOC', 100);\n    return {payload: \"recalc\"};\n}\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 540,
+        "y": 100,
+        "wires": [
+            [
+                "99ecdb6fa5add09a"
+            ]
+        ]
+    },
+    {
+        "id": "a50c4a9612f8e18c",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "SOC ≥ 80% → stop charge",
+        "func": "if (flow.get('limitedMode') !== true) return null;\n\nconst windowOpen = flow.get('windowOpen') || false;\n\nif (windowOpen) {\n    flow.set('windowOpen', false);\n    flow.set('desiredSOC', 0);\n    return {payload: \"recalc\"};\n}\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 540,
+        "y": 140,
+        "wires": [
+            [
+                "bf8922580e8bc7c1"
+            ]
+        ]
+    },
+    {
+        "id": "d6625d613342a788",
+        "type": "inject",
+        "z": "810d20f69203c8c5",
+        "name": "Force 100A (manual)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "1",
+        "topic": "",
+        "payload": "force_100",
+        "payloadType": "str",
+        "x": 160,
+        "y": 220,
+        "wires": [
+            [
+                "3df7a4fd586b60ac"
+            ]
+        ]
+    },
+    {
+        "id": "3df7a4fd586b60ac",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Start / Force 100A",
+        "func": "// MANUAL START / FORCE 100A\n// Hard-stop BOTH timers and return to normal 100A charging.\n\n// ------------------------------------------------------------\n// STOP / INVALIDATE 2-HOUR TIMER\n// ------------------------------------------------------------\n\nflow.set(\n    'balanceTimerGeneration',\n    (flow.get('balanceTimerGeneration') || 0) + 1\n);\n\nconst balanceTimer = flow.get('balanceTimerHandle');\n\nif (balanceTimer) {\n    clearInterval(balanceTimer);\n}\n\nflow.set('balanceTimerHandle', null);\nflow.set('balanceEnd', 0);\n\n// ------------------------------------------------------------\n// STOP / INVALIDATE 14-DAY TIMER\n// ------------------------------------------------------------\n\nflow.set(\n    'fullCycleTimerGeneration',\n    (flow.get('fullCycleTimerGeneration') || 0) + 1\n);\n\nconst fullCycleTimer = flow.get('fullCycleTimerHandle');\n\nif (fullCycleTimer) {\n    clearInterval(fullCycleTimer);\n}\n\nflow.set('fullCycleTimerHandle', null);\nflow.set('fullCycleEnd', 0);\n\n// ------------------------------------------------------------\n// RETURN TO NORMAL 100A MODE\n// ------------------------------------------------------------\n\nflow.set('balanceHold', false);\nflow.set('limitedMode', false);\nflow.set('windowOpen', false);\nflow.set('desiredSOC', 100);\n\n// ------------------------------------------------------------\n// CLEAR TIMER NODE STATUSES\n// ------------------------------------------------------------\n\n// The timer generations/handles above prevent old intervals\n// from putting their status back after this button is pressed.\n\nnode.status({});\n\n// Recalculate DVCC.\n// Cell-voltage protection remains active.\nreturn {payload: \"recalc\"};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 410,
+        "y": 220,
+        "wires": [
+            [
+                "a9af6d44d128fdb4",
+                "5f4cf87a5088c708",
+                "555ad8ea86a510d9"
+            ]
+        ]
+    },
+    {
+        "id": "d3a37014f4d4e416",
+        "type": "inject",
+        "z": "810d20f69203c8c5",
+        "name": "Enter Limited Mode + 14-day Timer",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "limited",
+        "payloadType": "str",
+        "x": 180,
+        "y": 300,
+        "wires": [
+            [
+                "05be261efac5d6aa"
+            ]
+        ]
+    },
+    {
+        "id": "05be261efac5d6aa",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Force Limited Mode",
+        "func": "// FORCE LIMITED MODE\n// Hard-stop the 2-hour timer.\n// Start exactly one fresh 14-day timer.\n\n// ------------------------------------------------------------\n// STOP / INVALIDATE 2-HOUR TIMER\n// ------------------------------------------------------------\n\nflow.set(\n    'balanceTimerGeneration',\n    (flow.get('balanceTimerGeneration') || 0) + 1\n);\n\nconst balanceTimer = flow.get('balanceTimerHandle');\n\nif (balanceTimer) {\n    clearInterval(balanceTimer);\n}\n\nflow.set('balanceTimerHandle', null);\nflow.set('balanceEnd', 0);\n\n// ------------------------------------------------------------\n// STOP / INVALIDATE EXISTING 14-DAY TIMER\n// ------------------------------------------------------------\n\nflow.set(\n    'fullCycleTimerGeneration',\n    (flow.get('fullCycleTimerGeneration') || 0) + 1\n);\n\nconst fullCycleTimer = flow.get('fullCycleTimerHandle');\n\nif (fullCycleTimer) {\n    clearInterval(fullCycleTimer);\n}\n\nflow.set('fullCycleTimerHandle', null);\nflow.set('fullCycleEnd', 0);\n\n// ------------------------------------------------------------\n// ENTER LIMITED MODE\n// ------------------------------------------------------------\n\nflow.set('balanceHold', false);\nflow.set('limitedMode', true);\nflow.set('windowOpen', false);\nflow.set('desiredSOC', 0);\n\n// ------------------------------------------------------------\n// NODE STATUS\n// ------------------------------------------------------------\n\nnode.status({\n    fill: \"green\",\n    shape: \"dot\",\n    text: \"Limited mode 30-80\"\n});\n\n// ------------------------------------------------------------\n// OUTPUT 1 → RECALCULATE DVCC\n// OUTPUT 2 → START 14-DAY TIMER\n// ------------------------------------------------------------\n\nnode.send([\n    {payload: \"recalc\"},\n    {payload: \"start_14day\"}\n]);\n\nreturn null;",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 300,
+        "wires": [
+            [
+                "736423de687ec3ec"
+            ],
+            [
+                "e642f50a317c208c"
+            ]
+        ]
+    },
+    {
+        "id": "b5fc946c79c51fec",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "2hr timer",
+        "func": "// 2-hour balance timer.\n// ONLY ONE 2-hour timer may exist at a time.\n// It may only run while balanceHold is true.\n\nconst duration = 2 * 60 * 60 * 1000;\nconst restoring = msg && msg.payload === \"restore_balance\";\n\n// ------------------------------------------------------------\n// CANCEL / INVALID STATE\n// ------------------------------------------------------------\n\nif (flow.get('balanceHold') !== true || flow.get('limitedMode') === true) {\n\n    // Invalidate any existing timer.\n    const generation =\n        (flow.get('balanceTimerGeneration') || 0) + 1;\n\n    flow.set('balanceTimerGeneration', generation);\n\n    // Clear stored expiration.\n    flow.set('balanceEnd', 0);\n\n    // Kill currently running interval.\n    const oldTimer = flow.get('balanceTimerHandle');\n\n    if (oldTimer) {\n        clearInterval(oldTimer);\n        flow.set('balanceTimerHandle', null);\n    }\n\n    // No status when timer is cleared.\n    node.status({});\n\n    return null;\n}\n\n// ------------------------------------------------------------\n// STOP ANY PREVIOUS INSTANCE\n// ------------------------------------------------------------\n\nconst oldTimer = flow.get('balanceTimerHandle');\n\nif (oldTimer) {\n    clearInterval(oldTimer);\n    flow.set('balanceTimerHandle', null);\n}\n\n// ------------------------------------------------------------\n// NEW GENERATION\n// ------------------------------------------------------------\n\nconst generation =\n    (flow.get('balanceTimerGeneration') || 0) + 1;\n\nflow.set('balanceTimerGeneration', generation);\n\n// ------------------------------------------------------------\n// DETERMINE END TIME\n// ------------------------------------------------------------\n\nlet end = Number(flow.get('balanceEnd'));\n\nif (!restoring || !Number.isFinite(end) || end <= 0) {\n    end = Date.now() + duration;\n    flow.set('balanceEnd', end);\n}\n\n// ------------------------------------------------------------\n// ALREADY EXPIRED\n// ------------------------------------------------------------\n\nif (end <= Date.now()) {\n\n    flow.set('balanceEnd', 0);\n    flow.set('balanceTimerHandle', null);\n\n    node.status({});\n\n    node.send({payload: \"done\"});\n\n    return null;\n}\n\n// ------------------------------------------------------------\n// INITIAL STATUS\n// ------------------------------------------------------------\n\nnode.status({\n    fill: \"blue\",\n    shape: \"ring\",\n    text: restoring\n        ? \"Balance timer restored\"\n        : \"Starting 2-hour balance timer\"\n});\n\n// ------------------------------------------------------------\n// SINGLE ACTIVE INTERVAL\n// ------------------------------------------------------------\n\nconst check = setInterval(() => {\n\n    // Make sure this is still the active timer.\n    if (\n        flow.get('balanceHold') !== true ||\n        flow.get('limitedMode') === true ||\n        flow.get('balanceTimerGeneration') !== generation ||\n        Number(flow.get('balanceEnd')) !== end\n    ) {\n        clearInterval(check);\n\n        // Only clear the status if this is still\n        // the active timer.\n        if (flow.get('balanceTimerHandle') === check) {\n            flow.set('balanceTimerHandle', null);\n            node.status({});\n        }\n\n        return;\n    }\n\n    const remaining = Math.max(0, end - Date.now());\n\n    // --------------------------------------------------------\n    // TIMER FINISHED\n    // --------------------------------------------------------\n\n    if (remaining <= 0) {\n\n        clearInterval(check);\n\n        flow.set('balanceEnd', 0);\n        flow.set('balanceTimerHandle', null);\n\n        node.status({});\n\n        node.send({payload: \"done\"});\n\n        return;\n    }\n\n    // --------------------------------------------------------\n    // DISPLAY REMAINING TIME\n    // --------------------------------------------------------\n\n    const mins = Math.ceil(remaining / 60000);\n\n    node.status({\n        fill: \"blue\",\n        shape: \"ring\",\n        text: mins + \" min left\"\n    });\n\n}, 5000);\n\n// Store the ONLY active timer handle.\nflow.set('balanceTimerHandle', check);\n\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 900,
+        "y": 40,
+        "wires": [
+            [
+                "c257cf1a27aa1b41"
+            ]
+        ]
+    },
+    {
+        "id": "f00aa79f92c83f8e",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "14d timer",
+        "func": "// 14-day limited-mode timer.\n// ONLY ONE 14-day timer may exist at a time.\n// It may only run while limitedMode is true.\n\nconst duration = 14 * 24 * 60 * 60 * 1000;\nconst restoring = msg && msg.payload === \"restore_14day\";\n\n// ------------------------------------------------------------\n// CANCEL / INVALID STATE\n// ------------------------------------------------------------\n\nif (flow.get('limitedMode') !== true || flow.get('balanceHold') === true) {\n\n    // Invalidate any existing timer.\n    const generation = (flow.get('fullCycleTimerGeneration') || 0) + 1;\n    flow.set('fullCycleTimerGeneration', generation);\n\n    // Clear stored expiration.\n    flow.set('fullCycleEnd', 0);\n\n    // Kill the currently running interval.\n    const oldTimer = flow.get('fullCycleTimerHandle');\n    if (oldTimer) {\n        clearInterval(oldTimer);\n        flow.set('fullCycleTimerHandle', null);\n    }\n\n    // No status when timer is cleared.\n    node.status({});\n\n    return null;\n}\n\n// ------------------------------------------------------------\n// STOP ANY PREVIOUS INSTANCE\n// ------------------------------------------------------------\n\nconst oldTimer = flow.get('fullCycleTimerHandle');\n\nif (oldTimer) {\n    clearInterval(oldTimer);\n    flow.set('fullCycleTimerHandle', null);\n}\n\n// ------------------------------------------------------------\n// NEW GENERATION\n// ------------------------------------------------------------\n\nconst generation =\n    (flow.get('fullCycleTimerGeneration') || 0) + 1;\n\nflow.set('fullCycleTimerGeneration', generation);\n\n// ------------------------------------------------------------\n// DETERMINE END TIME\n// ------------------------------------------------------------\n\nlet end = Number(flow.get('fullCycleEnd'));\n\nif (!restoring || !Number.isFinite(end) || end <= 0) {\n    end = Date.now() + duration;\n    flow.set('fullCycleEnd', end);\n}\n\n// ------------------------------------------------------------\n// ALREADY EXPIRED\n// ------------------------------------------------------------\n\nif (end <= Date.now()) {\n\n    flow.set('fullCycleEnd', 0);\n    flow.set('fullCycleTimerHandle', null);\n\n    node.status({});\n\n    node.send({payload: \"done\"});\n\n    return null;\n}\n\n// ------------------------------------------------------------\n// UPDATE STATUS\n// ------------------------------------------------------------\n\nnode.status({\n    fill: \"green\",\n    shape: \"ring\",\n    text: restoring\n        ? \"14-day timer restored\"\n        : \"Starting 14-day timer\"\n});\n\n// ------------------------------------------------------------\n// SINGLE ACTIVE INTERVAL\n// ------------------------------------------------------------\n\nconst check = setInterval(() => {\n\n    // Make sure this is still the active timer.\n    if (\n        flow.get('limitedMode') !== true ||\n        flow.get('balanceHold') === true ||\n        flow.get('fullCycleTimerGeneration') !== generation ||\n        Number(flow.get('fullCycleEnd')) !== end\n    ) {\n        clearInterval(check);\n\n        // Only clear our own stored handle.\n        if (flow.get('fullCycleTimerHandle') === check) {\n            flow.set('fullCycleTimerHandle', null);\n            node.status({});\n        }\n\n        return;\n    }\n\n    const remaining = Math.max(0, end - Date.now());\n\n    // --------------------------------------------------------\n    // TIMER FINISHED\n    // --------------------------------------------------------\n\n    if (remaining <= 0) {\n\n        clearInterval(check);\n\n        flow.set('fullCycleEnd', 0);\n        flow.set('fullCycleTimerHandle', null);\n\n        node.status({});\n\n        node.send({payload: \"done\"});\n\n        return;\n    }\n\n    // --------------------------------------------------------\n    // DISPLAY REMAINING TIME\n    // --------------------------------------------------------\n\n    const days = Math.floor(\n        remaining / (24 * 60 * 60 * 1000)\n    );\n\n    const hours = Math.floor(\n        (remaining % (24 * 60 * 60 * 1000)) /\n        (60 * 60 * 1000)\n    );\n\n    node.status({\n        fill: \"green\",\n        shape: \"ring\",\n        text: days + \"d \" + hours + \"h left\"\n    });\n\n}, 30000);\n\n// Store the ONLY active timer handle.\nflow.set('fullCycleTimerHandle', check);\n\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1000,
+        "y": 120,
+        "wires": [
+            [
+                "091d427e51eb4ccf"
+            ]
+        ]
+    },
+    {
+        "id": "b5c3ec430477fcb4",
+        "type": "victron-input-battery",
+        "z": "810d20f69203c8c5",
+        "service": "com.victronenergy.battery/290",
+        "path": "/Soc",
+        "serviceObj": {
+            "service": "com.victronenergy.battery/290",
+            "name": "SmartShunt",
+            "communityTag": "battery"
+        },
+        "pathObj": {
+            "path": "/Soc",
+            "type": "float",
+            "name": "State of charge (%)"
+        },
+        "name": "Battery SOC %",
+        "onlyChanges": true,
+        "roundValues": "1",
+        "outputs": 1,
+        "conditionalMode": false,
+        "outputTrue": "",
+        "outputFalse": "",
+        "debounce": "",
+        "x": 100,
+        "y": 100,
+        "wires": [
+            [
+                "70da64f771a1252f"
+            ]
+        ]
+    },
+    {
+        "id": "94427bab05fb2825",
+        "type": "victron-input-custom",
+        "z": "810d20f69203c8c5",
+        "service": "com.victronenergy.battery/1",
+        "path": "/System/MaxCellVoltage",
+        "serviceObj": {
+            "service": "com.victronenergy.battery/1",
+            "name": "SerialBattery(JKBMS) (1)"
+        },
+        "pathObj": {
+            "path": "/System/MaxCellVoltage",
+            "name": "/System/MaxCellVoltage",
+            "type": "number",
+            "value": 3.33
+        },
+        "name": "Max Cell Voltage",
+        "onlyChanges": false,
+        "roundValues": "no",
+        "rateLimit": "0.2",
+        "outputs": 1,
+        "conditionalMode": false,
+        "outputTrue": "true",
+        "outputFalse": "false",
+        "debounce": "2000",
+        "x": 120,
+        "y": 380,
+        "wires": [
+            [
+                "e98d952eb853de6f"
+            ]
+        ]
+    },
+    {
+        "id": "a4a2c89d85199cba",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Final Decision (min of SOC + Cell)",
+        "func": "const soc = flow.get('desiredSOC');\nconst cell = flow.get('desiredCell');\n\nlet final;\nif (cell === undefined || cell === null) {\n    final = (soc === undefined || soc === null) ? 100 : soc;\n} else {\n    final = Math.min(soc ?? 100, cell);\n}\n\nfinal = Math.max(0, Math.min(100, final));\nfinal = Math.round(final * 10) / 10;\n\nconst last = flow.get('lastDVCC');\n\nif (last === final) {\n    node.status({\n        fill: final === 0 ? \"red\" : (final >= 50 ? \"green\" : \"yellow\"),\n        shape: \"dot\",\n        text: \"DVCC \" + final + \" A (unchanged)\"\n    });\n    return null;\n}\n\nflow.set('lastDVCC', final);\nmsg.payload = final;\n\nnode.status({\n    fill: final === 0 ? \"red\" : (final >= 50 ? \"green\" : \"yellow\"),\n    shape: \"dot\",\n    text: \"DVCC → \" + final + \" A\"\n});\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 940,
+        "y": 300,
+        "wires": [
+            [
+                "14900a3fc61a3f8d",
+                "94ec2161a93de134"
+            ]
+        ]
+    },
+    {
+        "id": "14900a3fc61a3f8d",
+        "type": "victron-output-settings",
+        "z": "810d20f69203c8c5",
+        "service": "com.victronenergy.settings",
+        "path": "/Settings/SystemSetup/MaxChargeCurrent",
+        "serviceObj": {
+            "service": "com.victronenergy.settings",
+            "name": "Venus settings"
+        },
+        "pathObj": {
+            "path": "/Settings/SystemSetup/MaxChargeCurrent",
+            "type": "float",
+            "name": "DVCC Charge current limit (A)",
+            "mode": "both"
+        },
+        "name": "Set DVCC Max Charge Current",
+        "onlyChanges": false,
+        "outputs": 0,
+        "x": 1250,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "e642f50a317c208c",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "to 14d timer",
+        "mode": "link",
+        "links": [
+            "e488fedb042b799e"
+        ],
+        "x": 615,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "e488fedb042b799e",
+        "type": "link in",
+        "z": "810d20f69203c8c5",
+        "name": "14d timer in",
+        "links": [
+            "e642f50a317c208c",
+            "25e8a122b4aa3031",
+            "555ad8ea86a510d9",
+            "2207c0d217f290fb"
+        ],
+        "x": 905,
+        "y": 120,
+        "wires": [
+            [
+                "f00aa79f92c83f8e"
+            ]
+        ]
+    },
+    {
+        "id": "339fb71e51c57ebb",
+        "type": "link in",
+        "z": "810d20f69203c8c5",
+        "name": "link in 13",
+        "links": [
+            "c991f6df9233b23b",
+            "a9af6d44d128fdb4",
+            "c0d05242f125292d",
+            "ee777ba6578afa23",
+            "99ecdb6fa5add09a",
+            "bf8922580e8bc7c1",
+            "736423de687ec3ec",
+            "d50da29f544b5bee",
+            "033482f12a743247",
+            "1b500ca8ebcb18af",
+            "e47c3ada07f1eede"
+        ],
+        "x": 745,
+        "y": 300,
+        "wires": [
+            [
+                "a4a2c89d85199cba"
+            ]
+        ]
+    },
+    {
+        "id": "c991f6df9233b23b",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 6",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 645,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "a9af6d44d128fdb4",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 13",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 575,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "25e8a122b4aa3031",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 14",
+        "mode": "link",
+        "links": [
+            "e488fedb042b799e"
+        ],
+        "x": 1295,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "c0d05242f125292d",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 15",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 1295,
+        "y": 20,
+        "wires": []
+    },
+    {
+        "id": "ee777ba6578afa23",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 16",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 715,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "99ecdb6fa5add09a",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 17",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 715,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "736423de687ec3ec",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 18",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 615,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "bf8922580e8bc7c1",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 19",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 715,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "d50da29f544b5bee",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 20",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 1325,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "555ad8ea86a510d9",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 21",
+        "mode": "link",
+        "links": [
+            "e488fedb042b799e"
+        ],
+        "x": 575,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "5f4cf87a5088c708",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 22",
+        "mode": "link",
+        "links": [
+            "c70d7b7ce9175cc5"
+        ],
+        "x": 615,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "c70d7b7ce9175cc5",
+        "type": "link in",
+        "z": "810d20f69203c8c5",
+        "name": "link in 14",
+        "links": [
+            "5f4cf87a5088c708",
+            "e9b24eb945a47589",
+            "068327e91ad56520"
+        ],
+        "x": 805,
+        "y": 40,
+        "wires": [
+            [
+                "b5fc946c79c51fec"
+            ]
+        ]
+    },
+    {
+        "id": "e9b24eb945a47589",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 23",
+        "mode": "link",
+        "links": [
+            "c70d7b7ce9175cc5"
+        ],
+        "x": 715,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "786ba96329610c83",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Timer Email",
+        "func": "const end = Number(flow.get('fullCycleEnd'));\n\nif (!Number.isFinite(end) || end <= 0) {\n    msg.payload = \"0d 0h\";\n    return msg;\n}\n\nconst remaining = Math.max(0, end - Date.now());\n\nconst totalHours = Math.floor(remaining / (60 * 60 * 1000));\nconst days = Math.floor(totalHours / 24);\nconst hours = totalHours % 24;\n\nmsg.payload = days + \"d \" + hours + \"h\";\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1110,
+        "y": 180,
+        "wires": [
+            [
+                "cb053fa6bdd9a4df"
+            ]
+        ]
+    },
+    {
+        "id": "bf87b59ab665a5ca",
+        "type": "inject",
+        "z": "810d20f69203c8c5",
+        "name": "24 hr",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "86400",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 970,
+        "y": 180,
+        "wires": [
+            [
+                "786ba96329610c83"
+            ]
+        ]
+    },
+    {
+        "id": "cb053fa6bdd9a4df",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "link out 24",
+        "mode": "link",
+        "links": [
+            "e4b47a32a58468e1"
+        ],
+        "x": 1215,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "308514ddd0e0ac7e",
+        "type": "inject",
+        "z": "810d20f69203c8c5",
+        "name": "On start → restore timers",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "restore",
+        "payloadType": "str",
+        "x": 170,
+        "y": 460,
+        "wires": [
+            [
+                "6c70df9044734b69"
+            ]
+        ]
+    },
+    {
+        "id": "6c70df9044734b69",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Restore Control State",
+        "func": "// RESTORE CONTROL STATE\n// Runs once when this flow starts (Node-RED start or full deploy),\n// and can also be triggered manually from the inject button.\n// Re-arms whichever timer the saved flow state says should be running,\n// then forces DVCC to be rewritten.\n\nconst balanceHold = flow.get('balanceHold') === true;\nconst limitedMode = flow.get('limitedMode') === true;\n\nconst out = [null, null, null];\nlet text = \"Normal mode\";\n\nif (balanceHold && !limitedMode) {\n    out[0] = {payload: \"restore_balance\"};\n    text = \"Restored 2-hour balance\";\n} else if (limitedMode && !balanceHold) {\n    out[1] = {payload: \"restore_14day\"};\n    text = \"Restored limited mode + 14-day timer\";\n}\n\n// Make the Final Decision node write DVCC even if unchanged.\nflow.set('lastDVCC', undefined);\nout[2] = {payload: \"recalc\"};\n\nnode.status({fill: \"blue\", shape: \"dot\", text: text});\n\nreturn out;",
+        "outputs": 3,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 420,
+        "y": 460,
+        "wires": [
+            [
+                "068327e91ad56520"
+            ],
+            [
+                "2207c0d217f290fb"
+            ],
+            [
+                "033482f12a743247"
+            ]
+        ]
+    },
+    {
+        "id": "068327e91ad56520",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "restore → 2hr timer",
+        "mode": "link",
+        "links": [
+            "c70d7b7ce9175cc5"
+        ],
+        "x": 615,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "2207c0d217f290fb",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "restore → 14d timer",
+        "mode": "link",
+        "links": [
+            "e488fedb042b799e"
+        ],
+        "x": 615,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "033482f12a743247",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "restore → final",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 615,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "f9ea7d4a1f1c3d62",
+        "type": "inject",
+        "z": "810d20f69203c8c5",
+        "name": "Cell watchdog (every 5 s)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "5",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.5",
+        "topic": "",
+        "payload": "check",
+        "payloadType": "str",
+        "x": 150,
+        "y": 540,
+        "wires": [
+            [
+                "b13f62bb247182ab"
+            ]
+        ]
+    },
+    {
+        "id": "b13f62bb247182ab",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Cell Data Watchdog",
+        "func": "// CELL-VOLTAGE WATCHDOG\n// If no valid max-cell-voltage reading has arrived within\n// CELL_TIMEOUT, force the cell limit to 0 A (fail-safe).\n// Also runs at startup: until the first valid reading arrives,\n// charging is held at 0 A.\n// The Cell Reduction Formula node clears the fault on the next\n// valid reading.\n\nconst CELL_TIMEOUT = 60 * 1000;   // ms — see note on update rate\n\nconst now = Date.now();\nconst last = Number(flow.get('lastCellRx'));\nconst age = Number.isFinite(last) && last > 0 ? now - last : Infinity;\n\nif (age <= CELL_TIMEOUT) {\n    node.status({\n        fill: \"green\",\n        shape: \"dot\",\n        text: \"Cell data OK (\" + Math.round(age / 1000) + \" s old)\"\n    });\n    return null;\n}\n\nconst text = Number.isFinite(age)\n    ? \"FAULT: no cell data for \" + Math.round(age / 1000) + \" s → 0 A\"\n    : \"FAULT: no cell data yet → 0 A\";\n\nnode.status({ fill: \"red\", shape: \"dot\", text: text });\n\n// Already faulted at 0 A: nothing to send.\nif (flow.get('cellFault') === true && flow.get('desiredCell') === 0) {\n    return null;\n}\n\nflow.set('cellFault', true);\nflow.set('cellLimiterActive', true);\nflow.set('desiredCell', 0);\nflow.set('lastCellSend', now);\n\nreturn {payload: \"recalc\"};",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 540,
+        "wires": [
+            [
+                "1b500ca8ebcb18af"
+            ]
+        ]
+    },
+    {
+        "id": "1b500ca8ebcb18af",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "watchdog → final",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 615,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "94ec2161a93de134",
+        "type": "debug",
+        "z": "810d20f69203c8c5",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1180,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "a59ab24f1c73d93a",
+        "type": "victron-input-settings",
+        "z": "810d20f69203c8c5",
+        "service": "com.victronenergy.settings",
+        "path": "/Settings/SystemSetup/MaxChargeCurrent",
+        "serviceObj": {
+            "service": "com.victronenergy.settings",
+            "name": "Venus settings"
+        },
+        "pathObj": {
+            "path": "/Settings/SystemSetup/MaxChargeCurrent",
+            "type": "float",
+            "name": "DVCC Charge current limit (A)"
+        },
+        "name": "DVCC Max Charge Current (read-back)",
+        "onlyChanges": false,
+        "roundValues": "no",
+        "outputs": 1,
+        "x": 170,
+        "y": 600,
+        "wires": [
+            [
+                "6fa7c584c28b9c91"
+            ]
+        ]
+    },
+    {
+        "id": "6fa7c584c28b9c91",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "DVCC Read-back Check",
+        "func": "// DVCC READ-BACK CHECK\n// Compares the actual GX setting with the value this flow last wrote.\n// If they differ (write lost, or changed manually on the GX/VRM),\n// forces Final Decision to write again.\n// Rewrites are limited to once every 30 s so a mismatch can never\n// turn into a rapid write loop.\n\nconst TOLERANCE = 0.5;        // A\nconst MIN_REWRITE_GAP = 30000; // ms\n\nconst actual = Number(msg.payload);\nconst expected = flow.get('lastDVCC');\n\nif (typeof msg.payload !== \"number\" || !Number.isFinite(actual)) {\n    node.status({fill: \"red\", shape: \"ring\", text: \"invalid read-back: \" + JSON.stringify(msg.payload)});\n    return null;\n}\n\nif (expected === undefined || expected === null) {\n    node.status({fill: \"grey\", shape: \"ring\", text: \"GX \" + actual + \" A (nothing written yet)\"});\n    return null;\n}\n\nif (Math.abs(actual - expected) <= TOLERANCE) {\n    node.status({fill: \"green\", shape: \"dot\", text: \"GX \" + actual + \" A = flow \" + expected + \" A\"});\n    return null;\n}\n\nconst now = Date.now();\nconst lastRewrite = flow.get('lastDvccRewrite') || 0;\n\nif (now - lastRewrite < MIN_REWRITE_GAP) {\n    node.status({fill: \"yellow\", shape: \"ring\", text: \"GX \" + actual + \" A ≠ flow \" + expected + \" A (waiting)\"});\n    return null;\n}\n\nflow.set('lastDvccRewrite', now);\nflow.set('lastDVCC', undefined);   // defeat the \"unchanged\" check\n\nnode.status({fill: \"yellow\", shape: \"dot\", text: \"GX \" + actual + \" A ≠ flow \" + expected + \" A → rewriting\"});\n\nreturn {payload: \"recalc\"};",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 450,
+        "y": 600,
+        "wires": [
+            [
+                "e47c3ada07f1eede"
+            ]
+        ]
+    },
+    {
+        "id": "e47c3ada07f1eede",
+        "type": "link out",
+        "z": "810d20f69203c8c5",
+        "name": "read-back → final",
+        "mode": "link",
+        "links": [
+            "339fb71e51c57ebb"
+        ],
+        "x": 615,
+        "y": 600,
+        "wires": []
+    },
+    {
+        "id": "e98d952eb853de6f",
+        "type": "function",
+        "z": "810d20f69203c8c5",
+        "name": "Cell Reduction Formula (down 5 s / up 2 min)",
+        "func": "// Cell-voltage charge-current limiter\n//\n// NORMAL MODE, and LIMITED MODE while the 30 -> 80 % charge window is open:\n//   Applies the cell-voltage current curve (max 15 A, 0 A at 3.550 V).\n//\n// HYSTERESIS:\n//   Limiter activates at >= 3.350 V and releases at <= 3.340 V.\n//   Between 3.340 V and 3.350 V while active, it holds 15 A\n//   so DVCC does not bounce 15 A -> 100 A -> 15 A.\n//\n// LIMITED MODE, WINDOW CLOSED (SOC logic already holds DVCC at 0 A):\n//   Ignores cell voltage until it falls to <= 3.330 V, then clears\n//   the cell limit so SOC stays authoritative.\n//\n// RATE LIMIT (nothing is queued or stored):\n//   Decreases: at most one every 5 s (measured from the last decrease).\n//   Increases (including releasing the limit): blocked for 2 min after\n//   the last change of any kind.\n//   A blocked change is simply dropped; the next reading after the\n//   wait recalculates and applies its own value.\n//   Fail-safe 0 A (invalid reading, watchdog) is NOT rate-limited.\n//   Output is rounded to the nearest whole amp (the GX stores whole amps).\n//\n// FAIL-SAFE:\n//   A reading that is not a real number between 2.000 V and 4.000 V\n//   (null, blank, true/false, 0, text, etc.) is treated as a fault:\n//   cell current is forced to 0 A until a valid reading arrives.\n//   A separate watchdog node does the same if readings stop arriving.\n\nconst points = [\n    { v: 3.350, a: 30 },\n    { v: 3.375, a: 20 },\n    { v: 3.400, a: 10 },\n    { v: 3.425, a: 5 },\n    { v: 3.450, a: 2 },\n    { v: 3.500, a: 1 },\n    { v: 3.550, a: 0 }\n];\n\nconst ACTIVATE_VOLTAGE = 3.350;\nconst RELEASE_VOLTAGE = 3.340;\nconst RESTART_VOLTAGE = 3.330;\nconst MAX_CELL_CURRENT = 15;\nconst DECREASE_INTERVAL = 5 * 1000;       // ms between decreases\nconst INCREASE_INTERVAL = 2 * 60 * 1000;  // ms after last change before an increase\n\nconst MIN_VALID_VOLTAGE = 2.000;\nconst MAX_VALID_VOLTAGE = 4.000;\n\nconst now = Date.now();\nconst raw = msg.payload;\n\n// Accept only a real number, or a numeric string. Number(null),\n// Number(\"\"), Number(false) and Number([]) all give 0, which must\n// never be read as a low cell voltage.\nlet voltage = NaN;\nif (typeof raw === \"number\") {\n    voltage = raw;\n} else if (typeof raw === \"string\" && raw.trim() !== \"\") {\n    voltage = Number(raw);\n}\n\nif (\n    !Number.isFinite(voltage) ||\n    voltage < MIN_VALID_VOLTAGE ||\n    voltage > MAX_VALID_VOLTAGE\n) {\n    const alreadyFaulted =\n        flow.get('cellFault') === true &&\n        flow.get('desiredCell') === 0;\n\n    flow.set('cellFault', true);\n    flow.set('cellLimiterActive', true);\n\n    node.status({\n        fill:\"red\",\n        shape:\"dot\",\n        text:\"FAULT: invalid cell voltage (\" +\n             JSON.stringify(raw) + \") → 0 A\"\n    });\n\n    if (alreadyFaulted) return null;\n\n    flow.set('desiredCell', 0);\n    flow.set('lastCellSend', now);\n    return {payload:\"recalc\"};\n}\n\n// Valid reading: record it for the watchdog and clear any fault.\n// The 0 A fault limit stays in place until the normal logic below\n// replaces it (increases still wait the full 2 minutes).\nflow.set('lastCellRx', now);\nflow.set('cellFault', false);\n\n// ------------------------------------------------------------\n// HELPERS\n// ------------------------------------------------------------\n\n// Remove the cell limit. Only triggers a recalc if a limit was set.\n// Removing a limit is an increase, so when rateLimited is true it is\n// blocked until 2 minutes after the last change.\nfunction clearLimit(text, rateLimited) {\n    const prev = flow.get('desiredCell');\n    const hadLimit = prev !== undefined && prev !== null;\n\n    flow.set('cellLimiterActive', false);\n\n    if (!hadLimit) {\n        node.status({ fill:\"grey\", shape:\"ring\", text: text });\n        return null;\n    }\n\n    const lastSend = flow.get('lastCellSend') || 0;\n    const wait = INCREASE_INTERVAL - (now - lastSend);\n\n    if (rateLimited && wait > 0) {\n        node.status({\n            fill:\"blue\",\n            shape:\"ring\",\n            text: voltage.toFixed(3) + \" V — holding \" + prev +\n                  \" A, limit release blocked \" + Math.ceil(wait / 1000) + \" s\"\n        });\n        return null;\n    }\n\n    node.status({ fill:\"grey\", shape:\"ring\", text: text });\n\n    flow.set('desiredCell', undefined);\n    flow.set('lastCellSend', now);\n    return {payload:\"recalc\"};\n}\n\n// Apply a cell limit.\n//   Decrease: allowed if 5 s have passed since the last decrease.\n//   Increase: allowed if 2 min have passed since the last change.\n// A blocked change is dropped, not stored.\nfunction applyLimit(target, colour, label) {\n    const prev = flow.get('desiredCell');\n    const hasPrev = prev !== undefined && prev !== null;\n    const text = voltage.toFixed(3) + \" V → \" + target + \" A\" + label;\n\n    if (hasPrev && target === prev) {\n        node.status({ fill:colour, shape:\"dot\", text: text });\n        return null;\n    }\n\n    // No previous limit means \"no limit\", so any target is a decrease.\n    const isIncrease = hasPrev && target > prev;\n    const lastSend = flow.get('lastCellSend') || 0;\n    const lastDecrease = flow.get('lastCellDecrease') || 0;\n\n    if (isIncrease) {\n        const wait = INCREASE_INTERVAL - (now - lastSend);\n        if (wait > 0) {\n            node.status({\n                fill:\"blue\",\n                shape:\"ring\",\n                text: voltage.toFixed(3) + \" V — holding \" + prev +\n                      \" A, increase blocked \" + Math.ceil(wait / 1000) + \" s\"\n            });\n            return null;\n        }\n    } else {\n        const wait = DECREASE_INTERVAL - (now - lastDecrease);\n        if (wait > 0) {\n            node.status({\n                fill:\"yellow\",\n                shape:\"ring\",\n                text: voltage.toFixed(3) + \" V — holding \" +\n                      (hasPrev ? prev + \" A\" : \"no limit\") +\n                      \", decrease blocked \" + Math.ceil(wait / 1000) + \" s\"\n            });\n            return null;\n        }\n        flow.set('lastCellDecrease', now);\n    }\n\n    flow.set('desiredCell', target);\n    flow.set('lastCellSend', now);\n\n    node.status({ fill:colour, shape:\"dot\", text: text });\n\n    return {payload:\"recalc\"};\n}\n\n// ============================================================\n// LIMITED MODE, CHARGE WINDOW CLOSED\n// ============================================================\n\nif (flow.get('limitedMode') === true && flow.get('windowOpen') !== true) {\n\n    // Stay inactive while voltage is above 3.330 V.\n    if (voltage > RESTART_VOLTAGE) {\n        node.status({\n            fill:\"grey\",\n            shape:\"ring\",\n            text: voltage.toFixed(3) +\n                  \" V — limited mode, waiting ≤ 3.330 V\"\n        });\n        return null;\n    }\n\n    // Restart point reached: clear any leftover limit.\n    return clearLimit(voltage.toFixed(3) + \" V — cell limiter resumed\", false);\n}\n\n// ============================================================\n// NORMAL MODE / LIMITED-MODE CHARGE WINDOW — HYSTERESIS\n// ============================================================\n\nlet cellLimiterActive = flow.get('cellLimiterActive') === true;\n\n// If limiter is inactive, it activates at 3.350 V.\nif (!cellLimiterActive) {\n\n    if (voltage < ACTIVATE_VOLTAGE) {\n        return clearLimit(voltage.toFixed(3) + \" V (no cell limit)\", true);\n    }\n\n    cellLimiterActive = true;\n    flow.set('cellLimiterActive', true);\n}\n\n// Active limiter releases only at 3.340 V.\nif (voltage <= RELEASE_VOLTAGE) {\n    return clearLimit(voltage.toFixed(3) + \" V — cell limiter released\", true);\n}\n\n// 3.340–3.350 V band while active: hold 15 A.\nif (voltage < ACTIVATE_VOLTAGE) {\n    return applyLimit(MAX_CELL_CURRENT, \"yellow\", \" (hysteresis)\");\n}\n\n// ============================================================\n// NORMAL CELL CURVE\n// ============================================================\n\nlet current;\n\nif (voltage >= points[points.length - 1].v) {\n\n    current = 0;\n\n} else {\n\n    let i = 0;\n\n    while (\n        i < points.length - 1 &&\n        voltage > points[i + 1].v\n    ) {\n        i++;\n    }\n\n    const p0 = points[Math.max(i - 1, 0)];\n    const p1 = points[i];\n    const p2 = points[i + 1];\n    const p3 = points[Math.min(i + 2, points.length - 1)];\n\n    const t = (voltage - p1.v) / (p2.v - p1.v);\n\n    const m1 = 0.5 * (p2.a - p0.a);\n    const m2 = 0.5 * (p3.a - p1.a);\n\n    const t2 = t * t;\n    const t3 = t2 * t;\n\n    const a = 2 * t3 - 3 * t2 + 1;\n    const b = t3 - 2 * t2 + t;\n    const c = t3 - t2;\n    const d = -2 * t3 + 3 * t2;\n\n    current =\n        a * p1.a +\n        b * m1 +\n        c * m2 +\n        d * p2.a;\n\n    current = Math.max(0, Math.min(MAX_CELL_CURRENT, current));\n    // Round to the nearest whole amp (x.5 rounds up).\n    current = Math.round(current);\n}\n\nreturn applyLimit(current, \"green\", \"\");",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 410,
+        "y": 380,
+        "wires": [
+            [
+                "c991f6df9233b23b"
+            ]
+        ]
+    },
+    {
+        "id": "9be0b646d6805c3a",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "@victronenergy/node-red-contrib-victron": "1.6.64"
+        }
+    }
+]
