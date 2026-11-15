@@ -21,10 +21,10 @@ It also has a cell-voltage limiter that cuts charge current if any single cell r
 
 ## How the SOC cycle works
 
-1. **Full charge** charging is allowed up to 100%. When SOC reaches 99.8%, a 2-hour balance timer starts with charging still allowed (the cell limiter stays active).
-2. **Limited mode** after the 2 hours, DVCC is set to 0 A and a 14-day timer starts. The MPPT still powers loads, and in my system the battery may still gain around 2% SOC a day as 0 DVCC will still allow some current to the battery.
-3. **30–80% window** when SOC falls to 30%, charging is allowed up to 80%, then DVCC goes back to 0 A. This repeats for the rest of the 14 days.
-4. **Back to 100** When the 14 days are up, a full charge to 100% is allowed again and the cycle starts over.
+1. **Full charge:** charging is allowed up to 100%. When SOC reaches 99.8%, a 2-hour balance timer starts with charging still allowed (the cell limiter stays active).
+2. **Limited mode:** after the 2 hours, DVCC is set to 0 A and a 14-day timer starts. The MPPT still powers loads, and in my system the battery may still gain around 2% SOC a day as 0 DVCC will still allow some current to the battery.
+3. **30–80% window:** when SOC falls to 30%, charging is allowed up to 80%, then DVCC goes back to 0 A. This repeats for the rest of the 14 days.
+4. **Back to 100:** When the 14 days are up, a full charge to 100% is allowed again and the cycle starts over.
 
 Note that 30% is where charging starts, not a minimum. If it reaches 30% overnight, SOC will keep falling until the sun comes up.
 
@@ -38,8 +38,8 @@ This watches the highest cell voltage and caps DVCC:
 | 3.550 – 3.599 V   | 5 A, tapering to 1 A (1 A per 10 mV) |
 | 3.600 V and above | 0 A |
 
-- **Reductions are immediate.** Any step down, including the cut to 0 A, is applied on the reading that triggers it.
-- **Increases are slow.** Every step back up waits 5 minutes after the last change.
+- **Reductions are immediate:** Any step down, including the cut to 0 A, is applied on the reading that triggers it.
+- **Increases are slow:** Every step back up waits 5 minutes after the last change.
 - **Release hold:** once the limiter has started, it holds 5 A and only releases after the highest cell has been below 3.550 V for 5 minutes. Any reading at or above 3.550 V restarts the 5 minutes.
 - **Bad data:** a reading that isn't a number, or is below 2.0 V, forces 0 A.
 - **Watchdog:** if cell readings stop for 60 s while the last reading was 3.40 V or higher, charging goes to 0 A until data returns.
@@ -49,13 +49,13 @@ DVCC is set to whichever is lower, the SOC logic's value or the cell limiter's.
 
 ## Other features
 
-- **Restart recovery** after Node-RED restarts or redeploys, it restores the current mode and the time left on the 2-hour or 14-day timer, then rewrites DVCC.
-- **DVCC read-back check** if the setting on the GX doesn't match what the flow last wrote (a lost write, or a manual change), the flow writes it again. Rewrites are limited to once every 30 s.
-- **Manual buttons** *Force 100A* returns to normal charging, and *Enter Limited Mode* starts a fresh 14-day period.
-- **Daily output of the 14-day time remaining**, which I use for an email.
+- **Restart recovery:** after Node-RED restarts or redeploys, it restores the current mode and the time left on the 2-hour or 14-day timer, then rewrites DVCC.
+- **DVCC read-back check:** if the setting on the GX doesn't match what the flow last wrote (a lost write, or a manual change), the flow writes it again. Rewrites are limited to once every 30 s.
+- **Manual buttons:** *Force 100A* returns to normal charging, and *Enter Limited Mode* starts a fresh 14-day period.
+- **Daily output of the 14-day time remaining:**, which I use for an email.
 
 ## Important
 
-This is a software layer that only works while Node-RED is running. If Node-RED or the GX device stops, DVCC stays at whatever was last written. It also only controls chargers that follow DVCC. Keep the BMS's own over-voltage protection configured: it is the real last line of defence.
+This is a software layer that only works while Node-RED is running. If Node-RED or the GX device stops, DVCC stays at whatever was last written. It also only controls chargers that follow DVCC. Keep the BMS's own over-voltage protection configured: it is the real last line of defense.
 
 ![alt text](https://github.com/Tapap84/Node-RED-DVCC-Control/blob/main/Screenshot%202026-11-15%20093003.png)
