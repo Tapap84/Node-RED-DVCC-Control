@@ -58,4 +58,4 @@ DVCC is set to whichever is lower, the SOC logic's value or the cell limiter's.
 
 This is a software layer that only works while Node-RED is running. If Node-RED or the GX device stops, DVCC stays at whatever was last written. It also only controls chargers that follow DVCC. Keep the BMS's own over-voltage protection configured: it is the real last line of defence.
 
-[alt text](https://raw.githubusercontent.com/Tapap84/Node-RED-DVCC-Control/main/Screenshot%202026-11-15%20093003.png)
+[alt text](https://github.com/Tapap84/Node-RED-DVCC-Control/blob/main/Screenshot%202026-11-15%20093003.png)
