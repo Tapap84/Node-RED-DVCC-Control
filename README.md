@@ -1,8 +1,8 @@
 # Node-RED DVCC Control: Cell Protection and 30–80% SOC Cycling
 
-This was hand built; however, I used AI to check for errors and clean up issues. I tested the voltage limiter by using inject nodes to simulate a range of cell voltages. I then had Claude run the flow's actual code through a simulator: cell voltage sweeps from 3.40 V to 3.65 V, voltage spikes, bad and missing data, and a 50-day run with 30–80% cycles, several 14-day timer cycles and Node-RED restarts. It confirmed that the limiter and the timers work as described below.
+This was HAND BUILT; however, I used AI to check for errors and clean up node descriptions. I tested the voltage limiter by using inject nodes to simulate a range of cell voltages. Next, I tested on a work bench with an actual pack in use. I then had Claude run the flow's actual code through a simulator: cell voltage sweeps from 3.40 V to 3.65 V, voltage spikes, bad and missing data, and a 50-day run with 30–80% cycles, several 14-day timer cycles and Node-RED restarts. It confirmed that the limiter and the timers work as described below.
 
-Earlier versions of this flow have been running on my system since August 2026 without issues. This current version has been tested and running for 30 days with intentional over charging to test the cell protection and no issues were observed. 
+Earlier versions of this flow have been running on my system since August 2026 without issues. This current version has been tested and running for 30 days (starting Oct 15 2026) with intentional over charging to test the cell protection and no issues were observed. A second instance has been running starting the same time with no outside influence without issues. 
 
 ## What it's for
 
